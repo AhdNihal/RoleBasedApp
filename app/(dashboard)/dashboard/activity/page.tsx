@@ -1,126 +1,245 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Settings,
-  LogOut,
-  UserPlus,
-  Lock,
-  UserCog,
-  AlertCircle,
-  UserMinus,
-  Mail,
-  CheckCircle,
-  type LucideIcon,
-} from 'lucide-react';
-import { ActivityType } from '@/lib/db/schema';
-import { getActivityLogs } from '@/lib/db/queries';
+"use client";
 
-const iconMap: Record<ActivityType, LucideIcon> = {
-  [ActivityType.SIGN_UP]: UserPlus,
-  [ActivityType.SIGN_IN]: UserCog,
-  [ActivityType.SIGN_OUT]: LogOut,
-  [ActivityType.UPDATE_PASSWORD]: Lock,
-  [ActivityType.DELETE_ACCOUNT]: UserMinus,
-  [ActivityType.UPDATE_ACCOUNT]: Settings,
-  [ActivityType.CREATE_TEAM]: UserPlus,
-  [ActivityType.REMOVE_TEAM_MEMBER]: UserMinus,
-  [ActivityType.INVITE_TEAM_MEMBER]: Mail,
-  [ActivityType.ACCEPT_INVITATION]: CheckCircle,
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Loader2 } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
+import { User } from "@/lib/db/schema";
+
+// Add currentUser type and state
+type CurrentUser = {
+  id: number;
+  role: string;
 };
 
-function getRelativeTime(date: Date) {
-  const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+type Department = "Engineering" | "Marketing" | "Sales" | "Operations";
+const departments: Department[] = [
+  "Engineering",
+  "Marketing",
+  "Sales",
+  "Operations",
+];
 
-  if (diffInSeconds < 60) return 'just now';
-  if (diffInSeconds < 3600)
-    return `${Math.floor(diffInSeconds / 60)} minutes ago`;
-  if (diffInSeconds < 86400)
-    return `${Math.floor(diffInSeconds / 3600)} hours ago`;
-  if (diffInSeconds < 604800)
-    return `${Math.floor(diffInSeconds / 86400)} days ago`;
-  return date.toLocaleDateString();
-}
+type Role = "admin" | "member" | "owner";
+const roles: Role[] = ["admin", "member", "owner"];
 
-function formatAction(action: ActivityType): string {
-  switch (action) {
-    case ActivityType.SIGN_UP:
-      return 'You signed up';
-    case ActivityType.SIGN_IN:
-      return 'You signed in';
-    case ActivityType.SIGN_OUT:
-      return 'You signed out';
-    case ActivityType.UPDATE_PASSWORD:
-      return 'You changed your password';
-    case ActivityType.DELETE_ACCOUNT:
-      return 'You deleted your account';
-    case ActivityType.UPDATE_ACCOUNT:
-      return 'You updated your account';
-    case ActivityType.CREATE_TEAM:
-      return 'You created a new team';
-    case ActivityType.REMOVE_TEAM_MEMBER:
-      return 'You removed a team member';
-    case ActivityType.INVITE_TEAM_MEMBER:
-      return 'You invited a team member';
-    case ActivityType.ACCEPT_INVITATION:
-      return 'You accepted an invitation';
-    default:
-      return 'Unknown action occurred';
-  }
-}
+// ...existing User, Department, Role types...
 
-export default async function ActivityPage() {
-  const logs = await getActivityLogs();
+export default function UsersTable() {
+  const [users, setUsers] = useState<User[]>([]);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [isLoading, setIsLoading] = useState<{ [key: string]: boolean }>({});
+  const [tableLoading, setTableLoading] = useState(true);
 
-  return (
-    <section className="flex-1 p-4 lg:p-8">
-      <h1 className="text-lg lg:text-2xl font-medium text-gray-900 mb-6">
-        Activity Log
-      </h1>
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {logs.length > 0 ? (
-            <ul className="space-y-4">
-              {logs.map((log) => {
-                const Icon = iconMap[log.action as ActivityType] || Settings;
-                const formattedAction = formatAction(
-                  log.action as ActivityType
-                );
+  useEffect(() => {
+    Promise.all([fetchUsers(), fetchCurrentUser()]);
+  }, []);
 
-                return (
-                  <li key={log.id} className="flex items-center space-x-4">
-                    <div className="bg-orange-100 rounded-full p-2">
-                      <Icon className="w-5 h-5 text-orange-600" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">
-                        {formattedAction}
-                        {log.ipAddress && ` from IP ${log.ipAddress}`}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {getRelativeTime(new Date(log.timestamp))}
-                      </p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <div className="flex flex-col items-center justify-center text-center py-12">
-              <AlertCircle className="h-12 w-12 text-orange-500 mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                No activity yet
-              </h3>
-              <p className="text-sm text-gray-500 max-w-sm">
-                When you perform actions like signing in or updating your
-                account, they'll appear here.
-              </p>
-            </div>
+  const fetchUsers = async () => {
+    try {
+      const response = await fetch("/api/users");
+      if (!response.ok) throw new Error("Failed to fetch users");
+      const data = await response.json();
+      setUsers(data);
+      setTableLoading(false);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch users",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Add function to fetch current user
+  const fetchCurrentUser = async () => {
+    try {
+      const response = await fetch("/api/auth/me");
+      if (!response.ok) throw new Error("Failed to fetch current user");
+      const data = await response.json();
+      setCurrentUser(data);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch current user",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // ...existing fetchUsers function...
+
+  const handleRoleChange = async (userId: number, newRole: Role) => {
+    if (!isAdmin) return;
+
+    setIsLoading((prev) => ({ ...prev, [`role_${userId}`]: true }));
+    try {
+      const response = await fetch(`/api/users/${userId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ role: newRole }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update role");
+
+      setUsers((prev) =>
+        prev.map((user) =>
+          user.id === userId ? { ...user, role: newRole } : user
+        )
+      );
+
+      toast({
+        title: "Success",
+        description: "User role updated successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update user role",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading((prev) => ({ ...prev, [`role_${userId}`]: false }));
+    }
+  };
+
+  const handleDepartmentChange = async (
+    userId: number,
+    newDepartment: Department
+  ) => {
+    if (!isAdmin) return;
+
+    setIsLoading((prev) => ({ ...prev, [`dept_${userId}`]: true }));
+    try {
+      const response = await fetch(`/api/users/${userId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ department: newDepartment }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update department");
+
+      setUsers((prev) =>
+        prev.map((user) =>
+          user.id === userId ? { ...user, department: newDepartment } : user
+        )
+      );
+
+      toast({
+        title: "Success",
+        description: "User department updated successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update user department",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading((prev) => ({ ...prev, [`dept_${userId}`]: false }));
+    }
+  };
+
+  // Add isAdmin check
+  const isAdmin = currentUser?.role === "admin";
+
+  // Modify the table row rendering to conditionally render editable selects
+  const renderRoleCell = (user: User) => {
+    if (isAdmin) {
+      return (
+        <div className="flex items-center gap-2">
+          <Select
+            value={user.role}
+            onValueChange={(value: Role) => handleRoleChange(user.id, value)}
+            disabled={isLoading[`role_${user.id}`]}
+          >
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {roles.map((role) => (
+                <SelectItem key={role} value={role}>
+                  {role}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {isLoading[`role_${user.id}`] && (
+            <Loader2 className="h-4 w-4 animate-spin" />
           )}
-        </CardContent>
-      </Card>
-    </section>
+        </div>
+      );
+    }
+    return <div className="text-sm text-gray-500">{user.role}</div>;
+  };
+
+  const renderDepartmentCell = (user: User) => {
+    if (isAdmin) {
+      return (
+        <div className="flex items-center gap-2">
+          <Select
+            value={user.department || "Engineering"}
+            onValueChange={(value: Department) =>
+              handleDepartmentChange(user.id, value)
+            }
+            disabled={isLoading[`dept_${user.id}`]}
+          >
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {departments.map((dept) => (
+                <SelectItem key={dept} value={dept}>
+                  {dept}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {isLoading[`dept_${user.id}`] && (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          )}
+        </div>
+      );
+    }
+    return (
+      <div className="text-sm text-gray-500">
+        {user.department || "Engineering"}
+      </div>
+    );
+  };
+
+  // Update the return statement to use the new render functions
+  return (
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle>User Management</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {/* ...existing table header... */}
+        <div className="divide-y divide-gray-200 bg-white">
+          {users.map((user) => (
+            <div key={user.id} className="grid grid-cols-4 gap-4 px-6 py-4">
+              <div className="text-sm font-medium text-gray-900">
+                {user.name || "N/A"}
+              </div>
+              <div className="text-sm text-gray-500">{user.email}</div>
+              {renderRoleCell(user)}
+              {renderDepartmentCell(user)}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
